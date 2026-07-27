@@ -191,6 +191,27 @@ h2.section-title{font-family:var(--font-disp);font-weight:800;text-transform:upp
 .focus-picker button{flex:1;min-width:80px;background:var(--bg);border:1px solid var(--line);color:var(--ink-dim);border-radius:8px;padding:9px 10px;font-family:var(--font-disp);font-weight:700;font-size:.82rem;text-transform:uppercase;cursor:pointer;transition:all .12s}
 .focus-picker button:hover{border-color:var(--accent);color:var(--ink)}
 .focus-picker button.active{background:var(--accent);border-color:var(--accent);color:#0a1a24}
+/* ===== STATISTIQUES ===== */
+.stats-period{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:18px}
+.stats-period button{background:var(--surface);border:1px solid var(--line);color:var(--ink-dim);border-radius:20px;padding:7px 14px;font-family:var(--font-disp);font-weight:700;font-size:.82rem;text-transform:uppercase;cursor:pointer}
+.stats-period button.active{background:var(--accent);border-color:var(--accent);color:#0a1a24}
+.stats-cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(120px,1fr));gap:12px;margin-bottom:24px}
+.stat-card{background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:16px 12px;text-align:center}
+.stat-card .n{font-family:var(--font-disp);font-weight:900;font-size:2rem;line-height:1;color:var(--accent)}
+.stat-card .l{font-size:.75rem;text-transform:uppercase;color:var(--ink-dim);margin-top:6px;letter-spacing:.03em}
+.stats-h3{font-family:var(--font-disp);font-weight:800;text-transform:uppercase;font-size:1rem;color:var(--ink);margin:0 0 12px}
+.stats-graph{display:flex;align-items:flex-end;gap:3px;height:130px;background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:12px 10px 6px;margin-bottom:24px;overflow-x:auto}
+.sg-col{flex:1;min-width:12px;display:flex;flex-direction:column;align-items:center;justify-content:flex-end;height:100%;gap:4px}
+.sg-bar{width:100%;max-width:24px;background:linear-gradient(180deg,var(--accent),#2a7f9e);border-radius:3px 3px 0 0;transition:height .3s ease}
+.sg-col:hover .sg-bar{background:var(--amber)}
+.sg-lbl{font-size:.6rem;color:var(--ink-dim);font-family:var(--font-disp)}
+.stats-cols{display:grid;grid-template-columns:1fr 1fr;gap:28px}
+.stat-row{display:flex;align-items:center;gap:10px;margin-bottom:8px;font-size:.88rem}
+.stat-row span{flex:0 0 34%;color:var(--ink);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.stat-row .stat-bar{flex:1;height:8px;background:var(--bg);border-radius:99px;overflow:hidden;border:1px solid var(--line)}
+.stat-row .stat-bar div{height:100%;background:var(--accent);border-radius:99px}
+.stat-row strong{flex:0 0 42px;text-align:right;color:var(--accent);font-family:var(--font-disp)}
+@media(max-width:700px){.stats-cols{grid-template-columns:1fr;gap:20px}.stat-card .n{font-size:1.6rem}}
 /* Gestion des partenaires en tableau */
 .part-year-filter{display:flex;gap:6px;align-items:center;margin-left:auto}
 .part-year-filter select{background:var(--surface);border:1px solid var(--line);color:var(--ink);border-radius:8px;padding:7px 12px;font-family:var(--font-disp);font-weight:700}
@@ -965,6 +986,7 @@ function go(page,fromPop){
     else{history.pushState({page},'','#'+page);}
   }
   _currentPage=page;
+  trackVisit(page);
   loaders[page]?.();
 }
 let _currentPage='accueil';
@@ -1016,6 +1038,43 @@ function openExternal(key){
   window.open(url,'_blank','noopener');
 }
 
+/* ============ STATISTIQUES (compteur maison, sans cookies) ============ */
+// Identifiant de session anonyme : régénéré à chaque ouverture du site,
+// stocké uniquement en mémoire. Aucun cookie, aucune donnée personnelle.
+const _visiteurId=Math.random().toString(36).slice(2,12);
+let _trackedPages=new Set();
+function deviceType(){
+  const w=window.innerWidth;
+  if(w<=600)return 'mobile';
+  if(w<=1024)return 'tablette';
+  return 'ordinateur';
+}
+function refSource(){
+  const r=document.referrer||'';
+  if(!r)return 'direct';
+  try{
+    const h=new URL(r).hostname.replace(/^www\./,'');
+    if(h===location.hostname)return 'interne';
+    if(/google\./.test(h))return 'google';
+    if(/facebook|fb\./.test(h))return 'facebook';
+    if(/instagram/.test(h))return 'instagram';
+    return h;
+  }catch(_){return 'autre';}
+}
+async function trackVisit(page){
+  try{
+    // une seule visite par page et par session (évite de gonfler les chiffres)
+    if(_trackedPages.has(page))return;
+    _trackedPages.add(page);
+    await sb.from('visites').insert({
+      page,
+      appareil:deviceType(),
+      installee:isStandalone(),
+      referrer:refSource(),
+      visiteur:_visiteurId
+    });
+  }catch(e){/* silencieux : les stats ne doivent jamais gêner la navigation */}
+}
 /* ============ AUTH ============ */
 async function initAuth(){
   const {data:{session}}=await sb.auth.getSession();
@@ -2182,7 +2241,16 @@ async function loadMentions(){
 }
 async function loadLicence(){
   const {data}=await sb.from('pages').select('*').eq('slug','prise-licence').maybeSingle();
-  $('#licenceContent').innerHTML=data?`${data.image_url?`<img src="${esc(data.image_url)}" style="border-radius:8px;margin-bottom:20px" alt="">`:''}<div style="white-space:pre-wrap;line-height:1.8">${esc(data.contenu||'')}</div>`:emptyState("Infos licence à venir. Contacte le bureau !");
+  if(!data){$('#licenceContent').innerHTML=emptyState("Infos licence à venir. Contacte le bureau !");return;}
+  const pdfBtns=pdfButtons(data);
+  $('#licenceContent').innerHTML=`${data.image_url?`<img src="${esc(data.image_url)}" style="border-radius:8px;margin-bottom:20px" alt="">`:''}<div style="white-space:pre-wrap;line-height:1.8">${esc(data.contenu||'')}</div>${pdfBtns}`;
+}
+/* Génère les boutons PDF d'une page (licence, histoire, mentions) */
+function pdfButtons(data){
+  const btns=[];
+  if(data.pdf1_url)btns.push(`<button class="btn btn-primary btn-sm" onclick="openPdf('${esc(data.pdf1_url)}','${esc(data.pdf1_nom||'Document').replace(/'/g,"\\'")}')">📄 ${esc(data.pdf1_nom||'Voir le PDF')}</button>`);
+  if(data.pdf2_url)btns.push(`<button class="btn btn-primary btn-sm" onclick="openPdf('${esc(data.pdf2_url)}','${esc(data.pdf2_nom||'Document').replace(/'/g,"\\'")}')">📄 ${esc(data.pdf2_nom||'Voir le PDF')}</button>`);
+  return btns.length?`<div style="display:flex;gap:10px;flex-wrap:wrap;margin-top:24px">${btns.join('')}</div>`:'';
 }
 /* ============ RÉSULTATS (courses → catégories → générateur) ============ */
 async function loadResultats(){
@@ -3168,10 +3236,20 @@ async function openPageForm(slug,titre){
     ${fld('Titre','pg-titre',p?.titre||titre)}
     ${ar('Contenu','pg-contenu',p?.contenu)}
     ${fileField('Image (optionnel)','pg-imgfile','pg-img','image/*','pages',p?.image_url)}
-    <button class="btn btn-primary" onclick="savePage('${slug}')">Enregistrer</button>`);
+    <hr style="border:none;border-top:1px solid var(--line);margin:20px 0">
+    <p style="font-weight:600;margin-bottom:4px">📄 Documents PDF (optionnel)</p>
+    <p style="color:var(--ink-dim);font-size:.85rem;margin-bottom:14px">Jusqu'à 2 PDF téléchargeables (dossier d'inscription, règlement…).</p>
+    ${fld('Nom du 1er PDF','pg-pdf1nom',p?.pdf1_nom,'text','ex : Dossier d\'inscription')}
+    ${fileField('Fichier PDF n°1','pg-pdf1file','pg-pdf1','application/pdf','pages',p?.pdf1_url)}
+    ${fld('Nom du 2e PDF','pg-pdf2nom',p?.pdf2_nom,'text','ex : Règlement intérieur')}
+    ${fileField('Fichier PDF n°2','pg-pdf2file','pg-pdf2','application/pdf','pages',p?.pdf2_url)}
+    <button class="btn btn-primary" style="margin-top:8px" onclick="savePage('${slug}')">Enregistrer</button>`);
 }
 async function savePage(slug){
-  const p={slug,titre:$('#pg-titre').value.trim(),contenu:$('#pg-contenu').value.trim()||null,image_url:$('#pg-img').value.trim()||null,updated_at:new Date().toISOString()};
+  const p={slug,titre:$('#pg-titre').value.trim(),contenu:$('#pg-contenu').value.trim()||null,image_url:$('#pg-img').value.trim()||null,
+    pdf1_url:$('#pg-pdf1')?.value.trim()||null,pdf1_nom:$('#pg-pdf1nom')?.value.trim()||null,
+    pdf2_url:$('#pg-pdf2')?.value.trim()||null,pdf2_nom:$('#pg-pdf2nom')?.value.trim()||null,
+    updated_at:new Date().toISOString()};
   const {error}=await sb.from('pages').upsert(p,{onConflict:'slug'});
   if(error)return toast(error.message,true);
   closeModal();toast('Enregistré');
@@ -3218,8 +3296,113 @@ async function loadAdmin(){
       <h2 class="section-title" style="margin-bottom:8px">📢 Notifications push</h2>
       <p style="color:var(--ink-dim);font-size:.88rem;margin-bottom:16px">Envoie une notification à tous les membres abonnés, en un clic.</p>
       <div id="pushAdminContent"><div class="loading">Chargement…</div></div>
+    </div>
+    <div style="margin-top:28px">
+      <h2 class="section-title" style="margin-bottom:8px">📊 Fréquentation du site</h2>
+      <p style="color:var(--ink-dim);font-size:.88rem;margin-bottom:16px">Statistiques de visites, sans cookies ni service externe.</p>
+      <div class="stats-period" id="statsPeriod">
+        <button class="active" onclick="setStatsPeriod(7,this)">7 jours</button>
+        <button onclick="setStatsPeriod(30,this)">30 jours</button>
+        <button onclick="setStatsPeriod(90,this)">3 mois</button>
+        <button onclick="setStatsPeriod(365,this)">1 an</button>
+      </div>
+      <div id="statsContent"><div class="loading">Chargement…</div></div>
     </div>`;
   loadPushAdmin();
+  loadStats();
+}
+/* ---- Statistiques de fréquentation ---- */
+let _statsDays=7;
+function setStatsPeriod(d,btn){
+  _statsDays=d;
+  $$('#statsPeriod button').forEach(b=>b.classList.remove('active'));
+  btn.classList.add('active');
+  loadStats();
+}
+async function loadStats(){
+  const c=$('#statsContent');if(!c)return;
+  c.innerHTML='<div class="loading">Chargement…</div>';
+  const since=new Date(Date.now()-_statsDays*86400000).toISOString();
+  const {data,error}=await sb.from('visites').select('*').gte('created_at',since);
+  if(error){c.innerHTML=emptyState('Erreur : '+error.message);return;}
+  const v=data||[];
+  if(!v.length){c.innerHTML=emptyState('Aucune visite enregistrée sur cette période.');return;}
+
+  // Visiteurs uniques (par identifiant de session)
+  const uniques=new Set(v.map(x=>x.visiteur)).size;
+  // Répartition par appareil
+  const appareils={};v.forEach(x=>{const k=x.appareil||'?';appareils[k]=(appareils[k]||0)+1;});
+  // Pages les plus vues
+  const pages={};v.forEach(x=>{pages[x.page]=(pages[x.page]||0)+1;});
+  const topPages=Object.entries(pages).sort((a,b)=>b[1]-a[1]).slice(0,8);
+  // Provenance
+  const refs={};v.forEach(x=>{const k=x.referrer||'direct';if(k!=='interne')refs[k]=(refs[k]||0)+1;});
+  const topRefs=Object.entries(refs).sort((a,b)=>b[1]-a[1]).slice(0,6);
+  // Depuis l'app installée
+  const viaApp=v.filter(x=>x.installee).length;
+  // Visites par jour
+  const parJour={};
+  v.forEach(x=>{const d=(x.created_at||'').slice(0,10);parJour[d]=(parJour[d]||0)+1;});
+  const jours=[];
+  for(let i=_statsDays-1;i>=0;i--){
+    const d=new Date(Date.now()-i*86400000).toISOString().slice(0,10);
+    jours.push([d,parJour[d]||0]);
+  }
+  const maxJour=Math.max(...jours.map(j=>j[1]),1);
+  // On limite l'affichage du graphique aux 30 derniers points pour rester lisible
+  const graphJours=jours.slice(-30);
+
+  const pageLabels={accueil:'Accueil',calendrier:'Calendrier',actualites:'Actualités',resultats:'Résultats',photos:'Photos',bureau:'Le bureau',partenaires:'Partenaires',histoire:'Notre histoire',licence:'Licence',ouverture:'Ouverture',travaux:'Travaux',participer:'La parole aux membres',boutique:'Boutique',mentions:'Mentions légales',admin:'Espace bureau'};
+  const icoApp={mobile:'📱',tablette:'📲',ordinateur:'💻'};
+
+  c.innerHTML=`
+    <div class="stats-cards">
+      <div class="stat-card"><div class="n">${v.length}</div><div class="l">Pages vues</div></div>
+      <div class="stat-card"><div class="n">${uniques}</div><div class="l">Visiteurs</div></div>
+      <div class="stat-card"><div class="n">${Math.round(v.length/uniques*10)/10}</div><div class="l">Pages / visiteur</div></div>
+      <div class="stat-card"><div class="n">${viaApp}</div><div class="l">Depuis l'app</div></div>
+    </div>
+
+    <h3 class="stats-h3">📈 Visites par jour</h3>
+    <div class="stats-graph">
+      ${graphJours.map(([d,n])=>{
+        const h=Math.round((n/maxJour)*100);
+        const dd=new Date(d+'T00:00:00');
+        return `<div class="sg-col" title="${dd.toLocaleDateString('fr-FR',{weekday:'long',day:'numeric',month:'long'})} : ${n} vue${n>1?'s':''}">
+          <div class="sg-bar" style="height:${Math.max(h,2)}%"></div>
+          <span class="sg-lbl">${dd.getDate()}</span>
+        </div>`;
+      }).join('')}
+    </div>
+
+    <div class="stats-cols">
+      <div>
+        <h3 class="stats-h3">📄 Pages les plus vues</h3>
+        ${topPages.map(([p,n])=>`
+          <div class="stat-row">
+            <span>${esc(pageLabels[p]||p)}</span>
+            <div class="stat-bar"><div style="width:${Math.round(n/topPages[0][1]*100)}%"></div></div>
+            <strong>${n}</strong>
+          </div>`).join('')}
+      </div>
+      <div>
+        <h3 class="stats-h3">📱 Appareils</h3>
+        ${Object.entries(appareils).sort((a,b)=>b[1]-a[1]).map(([a,n])=>`
+          <div class="stat-row">
+            <span>${icoApp[a]||''} ${esc(a)}</span>
+            <div class="stat-bar"><div style="width:${Math.round(n/v.length*100)}%"></div></div>
+            <strong>${Math.round(n/v.length*100)}%</strong>
+          </div>`).join('')}
+        <h3 class="stats-h3" style="margin-top:20px">🔗 Provenance</h3>
+        ${topRefs.length?topRefs.map(([r,n])=>`
+          <div class="stat-row">
+            <span>${esc(r)}</span>
+            <div class="stat-bar"><div style="width:${Math.round(n/topRefs[0][1]*100)}%"></div></div>
+            <strong>${n}</strong>
+          </div>`).join(''):'<p style="color:var(--ink-dim);font-size:.85rem">Pas encore de données.</p>'}
+      </div>
+    </div>
+    <p style="color:var(--ink-dim);font-size:.8rem;margin-top:18px">Les visiteurs sont comptés par session (sans cookie). Une même personne revenant un autre jour est comptée à nouveau.</p>`;
 }
 async function addCat(){
   const nom=$('#catg-nom').value.trim();if(!nom)return toast('Nom requis',true);
@@ -3477,6 +3660,7 @@ function hideSplash(){
   refreshInstallBtns();
   // état historique initial (pour que le bouton retour du téléphone fonctionne)
   history.replaceState({page:'accueil'},'','#accueil');
+  trackVisit('accueil');
 })();
 /* filet de sécurité : masquer le splash même si une requête traîne */
 setTimeout(()=>$('#splash')?.classList.add('hide'), 4000);
