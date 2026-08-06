@@ -1108,10 +1108,8 @@ function openAuth(){
     </div>
     <div class="field"><label>Email</label><input id="auth-email" type="email" placeholder="ton@email.fr"></div>
     <div class="field"><label>Mot de passe</label><input id="auth-pass" type="password" placeholder="••••••••"></div>
-    <div style="display:flex;gap:10px;flex-wrap:wrap">
-      <button class="btn btn-primary" onclick="login()">Se connecter</button>
-      <button class="btn btn-ghost" onclick="signup()">Créer un compte</button>
-    </div>`);
+    <button class="btn btn-primary" onclick="login()">Se connecter</button>
+    <p style="color:var(--ink-dim);font-size:.82rem;margin-top:14px">Les comptes sont créés par le bureau. Pour obtenir un accès, contacte un responsable du club.</p>`);
 }
 async function login(){
   const email=$('#auth-email').value.trim(),password=$('#auth-pass').value;
